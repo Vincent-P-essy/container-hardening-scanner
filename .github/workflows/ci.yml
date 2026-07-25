@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -q
+
+  scan:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+
+      - name: The hardened example is clean
+        run: |
+          harden scan examples/Dockerfile.good examples/compose.good.yaml \
+            --fail-over low
+
+      - name: The deliberately bad example is caught
+        run: |
+          if harden scan examples/Dockerfile.bad examples/compose.bad.yaml \
+               --fail-over critical; then
+            echo "::error::the bad example did not trip a critical finding"
+            exit 1
+          fi
+          echo "caught as expected"
+
+      - name: Builder-stage findings do not leak into the report
+        # The property that makes this usable in CI: a USER root in a builder
+        # stage must not be reported, because nothing from that stage ships.
+        run: |
+          mkdir -p /tmp/ms
+          cat > /tmp/ms/Dockerfile <<'DOCKER'
+          FROM golang:1.23 AS builder
+          USER root
+          RUN go build -o /out/app
+          FROM gcr.io/distroless/static-debian12:nonroot
+          COPY --from=builder /out/app /app
+          USER nonroot
+          HEALTHCHECK CMD ["/app", "-h"]
+          DOCKER
+          harden scan /tmp/ms/Dockerfile --json ms.json
+          python -c "
+          import json; d = json.load(open('ms.json'))
+          rules = {f['rule'] for f in d['findings']}
+          assert 'HC001' not in rules, 'a builder-stage USER root was reported'
+          print('builder stage correctly ignored')"
+
+      - name: SARIF for code scanning
+        if: always()
+        run: harden scan examples --sarif harden.sarif || true
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: harden.sarif
