@@ -1,0 +1,22 @@
+# A single-stage image with most of the mistakes, for demonstration.
+FROM python:latest
+
+ENV DATABASE_PASSWORD=hunter2
+ENV API_TOKEN=ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git
+
+ADD https://example.com/installer.sh /tmp/installer.sh
+RUN curl -fsSL https://get.example.com/setup | bash
+
+WORKDIR /app
+COPY . .
+RUN pip install -r requirements.txt
+RUN go build -o /app/server ./cmd/server
+RUN chmod -R 777 /app
+
+EXPOSE 80
+CMD ["/app/server"]

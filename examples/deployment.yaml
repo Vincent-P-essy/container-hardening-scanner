@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: internal/payments-api:2.4.1
+          securityContext:
+            # Overrides the pod-level context above. A checker that reads only
+            # the pod securityContext reports this workload as hardened.
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              add: [SYS_PTRACE]
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: "1"

@@ -1,0 +1,14 @@
+services:
+  api:
+    image: internal/payments-api:latest
+    privileged: true
+    pid: host
+    network_mode: host
+    cap_add: [SYS_ADMIN, NET_ADMIN]
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc:/host-etc
+    ports:
+      - "8080:8080"
