@@ -1,0 +1,145 @@
+$ harden scan examples
+╭───────────── container hardening ──────────────╮
+│ score 0/100  grade F                           │
+│ 2 Dockerfile(s), 3 stage(s), 3 runtime file(s) │
+│ 10 critical   7 high   8 medium   5 low        │
+╰────────────────────────────────────────────────╯
+┏━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ rule  ┃ sev      ┃ where                    ┃ what is wrong           ┃ fix                      ┃
+┡━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ HC001 │ critical │ examples/Dockerfile.bad  │ the shipping stage      │ add a non-root USER as   │
+│       │          │                          │ declares no USER, so    │ the last instruction     │
+│       │          │                          │ the container runs as   │ before CMD, and chown    │
+│       │          │                          │ root                    │ anything it needs to     │
+│       │          │                          │                         │ write                    │
+│ HC008 │ critical │ examples/Dockerfile.bad: │ ENV on line 4 appears   │ remove it and rotate it  │
+│       │          │ 4                        │ to contain a password   │ — it is in the image     │
+│       │          │                          │                         │ layers and the build     │
+│       │          │                          │                         │ cache. Use a build       │
+│       │          │                          │                         │ secret (RUN              │
+│       │          │                          │                         │ --mount=type=secret) or  │
+│       │          │                          │                         │ inject at runtime        │
+│ HC008 │ critical │ examples/Dockerfile.bad: │ ENV on line 5 appears   │ remove it and rotate it  │
+│       │          │ 5                        │ to contain a secret or  │ — it is in the image     │
+│       │          │                          │ token                   │ layers and the build     │
+│       │          │                          │                         │ cache. Use a build       │
+│       │          │                          │                         │ secret (RUN              │
+│       │          │                          │                         │ --mount=type=secret) or  │
+│       │          │                          │                         │ inject at runtime        │
+│ RT001 │ critical │ examples/compose.bad.yam │ privileged disables     │ remove privileged: true  │
+│       │          │ l                        │ every isolation         │ and add only the         │
+│       │          │                          │ mechanism at once: all  │ capabilities actually    │
+│       │          │                          │ capabilities, all       │ needed                   │
+│       │          │                          │ devices, no seccomp, no │                          │
+│       │          │                          │ AppArmor. It is         │                          │
+│       │          │                          │ equivalent to running   │                          │
+│       │          │                          │ on the host             │                          │
+│ RT002 │ critical │ examples/compose.bad.yam │ /var/run/docker.sock is │ remove the mount. If the │
+│       │          │ l                        │ root on the host.       │ workload genuinely needs │
+│       │          │                          │ Anything that can write │ to build images, use a   │
+│       │          │                          │ to it can start a       │ rootless builder or a    │
+│       │          │                          │ privileged container    │ separate build service   │
+│       │          │                          │ and escape              │                          │
+│ RT006 │ critical │ examples/compose.bad.yam │ SYS_ADMIN grants:       │ remove SYS_ADMIN. If it  │
+│       │          │ l                        │ effectively root:       │ is genuinely required,   │
+│       │          │                          │ mount, namespaces, and  │ document why and isolate │
+│       │          │                          │ most of the kernel API  │ the workload             │
+│ RT006 │ critical │ examples/compose.bad.yam │ NET_ADMIN grants:       │ remove NET_ADMIN. If it  │
+│       │          │ l                        │ reconfigure the host    │ is genuinely required,   │
+│       │          │                          │ network                 │ document why and isolate │
+│       │          │                          │                         │ the workload             │
+│ RT006 │ critical │ examples/deployment.yaml │ SYS_PTRACE grants: read │ remove SYS_PTRACE. If it │
+│       │          │                          │ and write the memory of │ is genuinely required,   │
+│       │          │                          │ other processes         │ document why and isolate │
+│       │          │                          │                         │ the workload             │
+│ RT008 │ critical │ examples/compose.bad.yam │ the container sees and  │ remove pid: host         │
+│       │          │ l                        │ can signal every        │                          │
+│       │          │                          │ process on the host,    │                          │
+│       │          │                          │ including reading their │                          │
+│       │          │                          │ memory                  │                          │
+│ RT012 │ critical │ examples/compose.bad.yam │ mounting /etc exposes   │ remove the /etc mount,   │
+│       │          │ l                        │ host state the          │ or narrow it to the      │
+│       │          │                          │ container can read and  │ specific file needed and │
+│       │          │                          │ often write             │ mark it read-only        │
+│ HC010 │ high     │ examples/Dockerfile.bad: │ a script is piped from  │ download to a file,      │
+│       │          │ 13                       │ the network straight    │ verify a checksum or     │
+│       │          │                          │ into a shell — the      │ signature, then run it   │
+│       │          │                          │ build executes whatever │                          │
+│       │          │                          │ that URL returns today  │                          │
+│ HC012 │ high     │ examples/Dockerfile.bad: │ chmod 777 makes the     │ grant the narrowest mode │
+│       │          │ 19                       │ path writable by every  │ that works, and chown to │
+│       │          │                          │ process in the          │ the runtime user instead │
+│       │          │                          │ container               │                          │
+│ RT003 │ high     │ examples/compose.bad.yam │ the runtime             │ set user: "10001:10001"  │
+│       │          │ l                        │ configuration does not  │ (compose) or             │
+│       │          │                          │ override the image's    │ runAsNonRoot with        │
+│       │          │                          │ user, so an image that  │ runAsUser (Kubernetes)   │
+│       │          │                          │ defaults to root runs   │                          │
+│       │          │                          │ as root                 │                          │
+│ RT004 │ high     │ examples/compose.bad.yam │ without it, a setuid    │ add security_opt:        │
+│       │          │ l                        │ binary inside the       │ ["no-new-privileges:true │
+│       │          │                          │ container can still     │ "], or                   │
+│       │          │                          │ raise privileges —      │ allowPrivilegeEscalation │
+│       │          │                          │ which defeats running   │ : false                  │
+│       │          │                          │ as a non-root user      │                          │
+│ RT004 │ high     │ examples/deployment.yaml │ without it, a setuid    │ add security_opt:        │
+│       │          │                          │ binary inside the       │ ["no-new-privileges:true │
+│       │          │                          │ container can still     │ "], or                   │
+│       │          │                          │ raise privileges —      │ allowPrivilegeEscalation │
+│       │          │                          │ which defeats running   │ : false                  │
+│       │          │                          │ as a non-root user      │                          │
+│ RT009 │ high     │ examples/compose.bad.yam │ the container binds     │ use a bridge network and │
+│       │          │ l                        │ host ports directly and │ publish only the ports   │
+│       │          │                          │ can reach anything the  │ needed                   │
+│       │          │                          │ host can, bypassing     │                          │
+│       │          │                          │ network policy          │                          │
+│ RT011 │ high     │ examples/compose.bad.yam │ the default seccomp     │ remove                   │
+│       │          │ l                        │ profile blocks around   │ seccomp:unconfined, or   │
+│       │          │                          │ 44 dangerous syscalls;  │ supply a narrower custom │
+│       │          │                          │ unconfined restores all │ profile                  │
+│       │          │                          │ of them                 │                          │
+│ HC002 │ medium   │ examples/Dockerfile.bad: │ python:latest is pinned │ pin an explicit version; │
+│       │          │ 2                        │ to :latest, which moves │ a rebuild months later   │
+│       │          │                          │ under you               │ should produce the same  │
+│       │          │                          │                         │ image                    │
+│ HC007 │ medium   │ examples/Dockerfile.bad: │ ADD fetches a URL, with │ use RUN curl -fsSL <url> │
+│       │          │ 12                       │ no checksum and no way  │ -o file && echo          │
+│       │          │                          │ to see what arrived     │ '<sha256>  file' |       │
+│       │          │                          │                         │ sha256sum -c -, then     │
+│       │          │                          │                         │ extract                  │
+│ HC013 │ medium   │ examples/Dockerfile.bad: │ the image is built in   │ split into a builder     │
+│       │          │ 18                       │ one stage and contains  │ stage and a runtime      │
+│       │          │                          │ the toolchain it        │ stage, and COPY --from   │
+│       │          │                          │ compiled with           │ only the artefact        │
+│ RT005 │ medium   │ examples/compose.bad.yam │ Docker grants 14        │ cap_drop: [ALL], then    │
+│       │          │ l                        │ capabilities by         │ cap_add only what breaks │
+│       │          │                          │ default, including      │                          │
+│       │          │                          │ SETUID, CHOWN and       │                          │
+│       │          │                          │ NET_RAW. Almost no      │                          │
+│       │          │                          │ workload needs them     │                          │
+│ RT005 │ medium   │ examples/deployment.yaml │ Docker grants 14        │ cap_drop: [ALL], then    │
+│       │          │                          │ capabilities by         │ cap_add only what breaks │
+│       │          │                          │ default, including      │                          │
+│       │          │                          │ SETUID, CHOWN and       │                          │
+│       │          │                          │ NET_RAW. Almost no      │                          │
+│       │          │                          │ workload needs them     │                          │
+│ RT007 │ medium   │ examples/compose.bad.yam │ a writable root         │ read_only: true, with    │
+│       │          │ l                        │ filesystem lets an      │ tmpfs mounts for the     │
+│       │          │                          │ attacker drop tooling   │ paths that need writing  │
+│       │          │                          │ and persist inside the  │                          │
+│       │          │                          │ container               │                          │
+│ RT007 │ medium   │ examples/deployment.yaml │ a writable root         │ read_only: true, with    │
+│       │          │                          │ filesystem lets an      │ tmpfs mounts for the     │
+│       │          │                          │ attacker drop tooling   │ paths that need writing  │
+│       │          │                          │ and persist inside the  │                          │
+│       │          │                          │ container               │                          │
+│ RT010 │ medium   │ examples/compose.bad.yam │ one container can       │ set a memory limit, and  │
+│       │          │ l                        │ exhaust host memory and │ a CPU limit alongside it │
+│       │          │                          │ take its neighbours     │                          │
+│       │          │                          │ with it — a denial of   │                          │
+│       │          │                          │ service that needs no   │                          │
+│       │          │                          │ attacker                │                          │
+└───────┴──────────┴──────────────────────────┴─────────────────────────┴──────────────────────────┘
+... and 5 more
+
+Exit: 0

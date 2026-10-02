@@ -17,6 +17,12 @@ runtime checks, in one report, with SARIF for GitHub code scanning.
 
 ![harden scan](docs/assets/scan-bad.png)
 
+## Execution preview
+
+![container-hardening-scanner execution](docs/screenshots/execution.png)
+
+Local execution of `harden scan examples`. The input and output shown come from the repository example or test fixtures. [Verification](docs/verification.md).
+
 ## Multi-stage awareness is the difference
 
 A `USER root` in a builder stage is **not** a finding — nothing from that stage
